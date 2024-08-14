@@ -2,6 +2,7 @@ from cog import BasePredictor, Input, Path, BaseModel
 from pydub import AudioSegment
 from typing import Any
 from whisperx.audio import N_SAMPLES, log_mel_spectrogram
+from utils.google_drive import fetch_audio
 
 import gc
 import math
@@ -14,7 +15,6 @@ import torch
 
 compute_type = "float16"  # change to "int8" if low on GPU mem (may reduce accuracy)
 device = "cuda"
-whisper_arch = "./models/faster-whisper-large-v3"
 
 
 class Output(BaseModel):
@@ -39,7 +39,9 @@ class Predictor(BasePredictor):
 
     def predict(
             self,
-            audio_file: Path = Input(description="Audio file"),
+            audio_file: Path = Input(description="Audio file", default=None),
+            url: str = Input(description="Drive URL of the meeting file (if audio_file is not provided)", default=None),
+            model: str = Input(description="Model Whisper", default="faster-whisper-large-v3"),
             language: str = Input(
                 description="ISO code of the language spoken in the audio, specify None to perform language detection",
                 default=None),
@@ -100,6 +102,16 @@ class Predictor(BasePredictor):
                 "vad_offset": vad_offset
             }
 
+            whisper_arch = './models/' + model
+
+            if url is not None:
+                start_time = time.time_ns() / 1e6
+                audio_file, title = fetch_audio(url)
+
+                if debug:
+                    elapsed_time = time.time_ns() / 1e6 - start_time
+                    print(f"Duration to download audio: {elapsed_time:.2f} ms")
+
             audio_duration = get_audio_duration(audio_file)
 
             if language is None and language_detection_min_prob > 0 and audio_duration > 30000:
@@ -115,7 +127,7 @@ class Predictor(BasePredictor):
 
                 print("Detecting languages on segments starting at " + ', '.join(map(str, segments_starts)))
 
-                detected_language_details = detect_language(audio_file, segments_starts, language_detection_min_prob,
+                detected_language_details = detect_language(whisper_arch, audio_file, segments_starts, language_detection_min_prob,
                                                             language_detection_max_tries, asr_options, vad_options)
 
                 detected_language_code = detected_language_details["language"]
@@ -179,7 +191,7 @@ def get_audio_duration(file_path):
     return len(AudioSegment.from_file(file_path))
 
 
-def detect_language(full_audio_file_path, segments_starts, language_detection_min_prob,
+def detect_language(whisper_arch, full_audio_file_path, segments_starts, language_detection_min_prob,
                     language_detection_max_tries, asr_options, vad_options, iteration=1):
     model = whisperx.load_model(whisper_arch, device, compute_type=compute_type, asr_options=asr_options,
                                 vad_options=vad_options)
@@ -216,7 +228,7 @@ def detect_language(full_audio_file_path, segments_starts, language_detection_mi
     if language_probability >= language_detection_min_prob or iteration >= language_detection_max_tries:
         return detected_language
 
-    next_iteration_detected_language = detect_language(full_audio_file_path, segments_starts,
+    next_iteration_detected_language = detect_language(whisper_arch, full_audio_file_path, segments_starts,
                                                        language_detection_min_prob, language_detection_max_tries,
                                                        asr_options, vad_options, iteration + 1)
 

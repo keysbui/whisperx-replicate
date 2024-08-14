@@ -5,4 +5,6 @@ build:
     - "ffmpeg"
   python_version: "3.11"
   python_requirements: requirements.txt
+  run:
+    - pip install speechbrain==0.5.16
 predict: "predict.py:Predictor"

@@ -4,3 +4,8 @@ torchvision==0.16.0+cu121
 torchaudio==2.1.0+cu121
 pydub
 git+https://github.com/m-bain/whisperx.git
+speechbrain==0.5.16
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
