@@ -52,7 +52,7 @@ def fetch_audio(url):
     ts = int(time.time())
     file_extension = file_name.split('.')[-1]
 
-    file_path = 'tmp/' + str(ts) + '.' + file_extension
+    file_path = '/tmp/gd_' + str(ts) + '.' + file_extension
     with open(file_path, 'wb') as file:
         file.write(drive_file.getvalue())
     
