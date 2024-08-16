@@ -24,7 +24,7 @@ class Output(BaseModel):
     segments: Any
     detected_language: str
     summary: Any
-
+    audio_duration: int
 
 class Predictor(BasePredictor):
     def setup(self):
@@ -234,7 +234,8 @@ class Predictor(BasePredictor):
             task_id=task_id,
             segments=result["segments"],
             detected_language=detected_language,
-            summary=summary
+            summary=summary,
+            audio_duration=audio_duration
         )
 
 
