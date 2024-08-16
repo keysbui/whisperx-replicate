@@ -2,6 +2,7 @@ from __future__ import unicode_literals
 import re
 import io
 import os
+import time
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -46,8 +47,12 @@ def fetch_audio(url):
     while done is False:
         status, done = downloader.next_chunk()
         print(f"Download {int(status.progress() * 100)}.")
-    
-    file_path = 'tmp/'+file_name
+
+    # get current timestamp
+    ts = int(time.time())
+    file_extension = file_name.split('.')[-1]
+
+    file_path = '/tmp/gd_' + str(ts) + '.' + file_extension
     with open(file_path, 'wb') as file:
         file.write(drive_file.getvalue())
     
