@@ -2,11 +2,13 @@ from cog import BasePredictor, Input, Path, BaseModel
 from pydub import AudioSegment
 from typing import Any
 from whisperx.audio import N_SAMPLES, log_mel_spectrogram
+import google.generativeai as genai
 from utils.google_drive import fetch_audio
 
 import gc
 import math
 import os
+import json
 import shutil
 import whisperx
 import tempfile
@@ -18,8 +20,10 @@ device = "cuda"
 
 
 class Output(BaseModel):
+    task_id: str
     segments: Any
     detected_language: str
+    summary: Any
 
 
 class Predictor(BasePredictor):
@@ -39,6 +43,7 @@ class Predictor(BasePredictor):
 
     def predict(
             self,
+            task_id: str = Input(description="Task ID", default=None),
             audio_file: Path = Input(description="Audio file", default=None),
             url: str = Input(description="Drive URL of the meeting file (if audio_file is not provided)", default=None),
             model: str = Input(description="Model Whisper", default="faster-whisper-large-v3"),
@@ -80,6 +85,9 @@ class Predictor(BasePredictor):
             huggingface_access_token: str = Input(
                 description="To enable diarization, please enter your HuggingFace token (read). You need to accept "
                             "the user agreement for the models specified in the README.",
+                default=None),
+            genai_access_token: str = Input(
+                description="To enable summary, please enter your GenAI token",
                 default=None),
             min_speakers: int = Input(
                 description="Minimum number of speakers if diarization is activated (leave blank if unknown)",
@@ -178,12 +186,55 @@ class Predictor(BasePredictor):
             if diarization:
                 result = diarize(audio, result, debug, huggingface_access_token, min_speakers, max_speakers)
 
+                genai.configure(api_key=genai_access_token)
+                # Create the model
+                generation_config = {
+                    "temperature": 1,
+                    "top_p": 0.95,
+                    "top_k": 64,
+                    "max_output_tokens": 8192,
+                    "response_mime_type": "application/json",
+                }
+
+                model = genai.GenerativeModel(
+                model_name="gemini-1.5-flash",
+                generation_config=generation_config,
+                # safety_settings = Adjust safety settings
+                # See https://ai.google.dev/gemini-api/docs/safety-settings
+                )
+
+                chat_session = model.start_chat(
+                history=[
+                    {
+                    "role": "user",
+                    "parts": [
+                        "I want you to act as a IT comtor from NAL - a outsource company. Please summarize the provided meeting video "
+                        "transcript about discuss with customer  with the following structure:\n\n    **Short Summary:**\n    - Brief "
+                        "introduction to the main concept.\n    - Key points discussed about the concept, including specific "
+                        "technologies or examples mentioned.\n    - Overview of the applications and implications of the discussed "
+                        "concept.\n    - Mention of any processes or methods described in detail.\n    \n    **Detailed Summary:**\n  "
+                        "  - Break down the content into sections\n    - Provide a concise summary of each section, capturing the "
+                        "main ideas and examples.\n    - Highlight any important explanations, demonstrations, or technical details "
+                        "given in each part.\n    - If there are any notable quotes or statements made by the speaker, include them "
+                        "to add context and depth.\n    \n    In language Vietnamese\n\nUsing this JSON schema:\n    Section = {"
+                        "\"section_number\": int, \"section_title\": str, \"section_content\": str}\n  Return a `{\"short\": str, \"detail\": [Section]}`",
+                    ],
+                    }
+                ])
+
+                transcript = ' '.join([segment['text'] for segment in result["segments"]])
+                response = chat_session.send_message(transcript)
+                summary=json.loads(response.text)
+
             if debug:
                 print(f"max gpu memory allocated over runtime: {torch.cuda.max_memory_reserved() / (1024 ** 3):.2f} GB")
 
+
         return Output(
+            task_id=task_id,
             segments=result["segments"],
-            detected_language=detected_language
+            detected_language=detected_language,
+            summary=summary
         )
 
 
